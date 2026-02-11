@@ -1,0 +1,39 @@
+name: Claude Code Review
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  claude-review:
+    # Only run on Dependabot PRs
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      actions: read
+
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+
+      - name: Run Claude Code Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ github.token }}
+          prompt: |
+            Review this Dependabot dependency update PR. Specifically:
+
+            1. Check if the dependency version bump is a major, minor, or patch update
+            2. Look at the changelog/release notes for breaking changes
+            3. Verify the updated dependency is still compatible with our Java 17 / Spring Boot 3.1 setup
+            4. Check if our code that uses the updated dependency (see ItemService.java) needs any changes
+            5. Run the tests with `./mvnw test --batch-mode` and report results
+            6. Provide a clear recommendation: safe to merge, needs changes, or needs manual review
+          claude_args: "--max-turns 10"
