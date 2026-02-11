@@ -36,4 +36,5 @@ jobs:
             4. Check if our code that uses the updated dependency (see ItemService.java) needs any changes
             5. Run the tests with `./mvnw test --batch-mode` and report results
             6. Provide a clear recommendation: safe to merge, needs changes, or needs manual review
+          allowed_bots: "dependabot[bot]"
           claude_args: "--max-turns 10"

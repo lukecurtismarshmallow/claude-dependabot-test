@@ -6,7 +6,9 @@
       "Bash(./mvnw clean verify:*)",
       "Bash(./mvnw test:*)",
       "Bash(git init:*)",
-      "Bash(git branch:*)"
+      "Bash(git branch:*)",
+      "Bash(gh auth status:*)",
+      "Bash(git remote set-url:*)"
     ]
   }
 }
