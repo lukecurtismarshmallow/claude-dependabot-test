@@ -22,11 +22,19 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 1
 
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
       - name: Run Claude Code Review
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ github.token }}
+          allowed_tools: "Bash(./mvnw*),Bash(git diff*),Bash(git log*),WebSearch,WebFetch"
           prompt: |
             Review this Dependabot dependency update PR. Specifically:
 
@@ -37,4 +45,4 @@ jobs:
             5. Run the tests with `./mvnw test --batch-mode` and report results
             6. Provide a clear recommendation: safe to merge, needs changes, or needs manual review
           allowed_bots: "dependabot[bot]"
-          claude_args: "--max-turns 10"
+          claude_args: "--max-turns 20"
