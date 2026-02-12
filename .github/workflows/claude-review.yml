@@ -69,14 +69,18 @@ jobs:
             Bash(git add*)
             Bash(git commit*)
             Bash(git push*)
+            WebSearch
+            WebFetch
           prompt: |
             You are reviewing a Dependabot dependency update PR. Your goal is to ensure it's safe and working.
+
+            **CRITICAL: Trust the PR data.** The dependency version in this PR definitely exists — Dependabot only creates PRs for published releases. Do NOT claim a version doesn't exist or hasn't been released. Your training data may be outdated. Always use WebSearch to look up current release information rather than relying on your built-in knowledge about version numbers if you run into this scenario
 
             **Your Tasks:**
 
             1. **Analyze the update:**
                - Check if this is a major, minor, or patch version bump
-               - Look at changelogs/release notes for breaking changes (use WebSearch if needed)
+               - Use WebSearch to look up the changelog/release notes for the NEW version (do not guess from memory)
                - Verify compatibility with Java 17 and Spring Boot 3.1.0
 
             2. **Check code compatibility:**
