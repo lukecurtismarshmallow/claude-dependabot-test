@@ -94,21 +94,15 @@ jobs:
                - Verify compatibility with Java 17 and Spring Boot 3.1.0
 
             2. **Check code compatibility:**
-               - Review ItemService.java and other code that uses the updated dependency
+               - Review code that uses the updated dependency
                - Look for deprecated APIs or breaking changes that affect our code
 
-            3. **Run tests:**
-               - Execute: `./mvnw clean verify --batch-mode`
-               - Analyze any test failures or compilation errors
-
-            4. **If CI failed or tests fail, you MUST fix the issues immediately. Do not ask for permission. Do not report the issue and wait. Just fix it:**
+            3. **If CI failed or tests fail, you MUST fix the issues immediately. Do not ask for permission. Do not report the issue and wait. Just fix it:**
                - Identify the root cause
                - Make the necessary code changes (update imports, fix method calls, add/update dependencies, change configurations — whatever is needed)
-               - **MANDATORY: After making fixes, you MUST run `./mvnw clean verify --batch-mode` again and confirm BUILD SUCCESS before committing. Do NOT commit untested code. Do NOT skip this step. If the build still fails, keep fixing until it passes.**
-               - Only after seeing BUILD SUCCESS: commit your changes with a clear message explaining what was fixed
                - Push the commit to this PR branch using `git push`
 
-            5. **Report results:**
+            4. **Report results:**
                - Provide a summary of what you found and what you did
                - If you made fixes, explain what broke and how you fixed it
                - **Include the final `./mvnw clean verify` output showing BUILD SUCCESS or BUILD FAILURE**
