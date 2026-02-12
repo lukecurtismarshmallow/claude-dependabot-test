@@ -33,13 +33,16 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           additional_permissions: |
-            Bash(./mvnw*)
-            Bash(mvn*)
+            Bash(./mvnw *)
+            Bash(mvn *)
             Bash(git diff*)
             Bash(git log*)
-            Bash(git add*)
-            Bash(git commit*)
+            Bash(git add *)
+            Bash(git commit *)
             Bash(git push*)
+            Bash(chmod *)
+            Edit
+            Write
             WebSearch
             WebFetch
           claude_args: "--max-turns 30"

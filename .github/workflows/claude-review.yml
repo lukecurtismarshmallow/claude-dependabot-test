@@ -7,10 +7,8 @@ on:
 
 jobs:
   claude-review:
-    # Only run when CI was triggered by a Dependabot PR
-    if: |
-      github.event.workflow_run.pull_requests[0] &&
-      github.event.workflow_run.actor.login == 'dependabot[bot]'
+    # Only run when CI was triggered by dependabot
+    if: github.event.workflow_run.actor.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -19,28 +17,55 @@ jobs:
       actions: read
 
     steps:
-      - name: Get PR details
-        id: get-pr
+      - name: Find PR for this workflow run
+        id: find-pr
         uses: actions/github-script@v7
         with:
           script: |
-            const pr = context.payload.workflow_run.pull_requests[0];
-            core.setOutput('pr-number', pr.number);
-            const { data: prData } = await github.rest.pulls.get({
+            // Try the pull_requests array first
+            const prs = context.payload.workflow_run.pull_requests;
+            if (prs && prs.length > 0) {
+              core.setOutput('pr-number', prs[0].number);
+              const { data: prData } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prs[0].number
+              });
+              core.setOutput('pr-head-sha', prData.head.sha);
+              core.setOutput('pr-head-ref', prData.head.ref);
+              core.setOutput('found', 'true');
+              return;
+            }
+
+            // Fallback: search for PR by branch name
+            const branch = context.payload.workflow_run.head_branch;
+            const { data: pulls } = await github.rest.pulls.list({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              pull_number: pr.number
+              head: `${context.repo.owner}:${branch}`,
+              state: 'open'
             });
-            core.setOutput('pr-head-sha', prData.head.sha);
+
+            if (pulls.length > 0) {
+              core.setOutput('pr-number', pulls[0].number);
+              core.setOutput('pr-head-sha', pulls[0].head.sha);
+              core.setOutput('pr-head-ref', pulls[0].head.ref);
+              core.setOutput('found', 'true');
+            } else {
+              core.setOutput('found', 'false');
+              core.warning(`No open PR found for branch: ${branch}`);
+            }
 
       - name: Checkout PR head
+        if: steps.find-pr.outputs.found == 'true'
         uses: actions/checkout@v4
         with:
-          ref: ${{ steps.get-pr.outputs.pr-head-sha }}
+          ref: ${{ steps.find-pr.outputs.pr-head-sha }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up JDK 17
+        if: steps.find-pr.outputs.found == 'true'
         uses: actions/setup-java@v4
         with:
           java-version: '17'
@@ -48,6 +73,7 @@ jobs:
           cache: maven
 
       - name: Run Claude Code Review
+        if: steps.find-pr.outputs.found == 'true'
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -55,13 +81,16 @@ jobs:
           use_sticky_comment: true
           show_full_output: true
           additional_permissions: |
-            Bash(./mvnw*)
-            Bash(mvn*)
+            Bash(./mvnw *)
+            Bash(mvn *)
             Bash(git diff*)
             Bash(git log*)
-            Bash(git add*)
-            Bash(git commit*)
+            Bash(git add *)
+            Bash(git commit *)
             Bash(git push*)
+            Bash(chmod *)
+            Edit
+            Write
             WebSearch
             WebFetch
           prompt: |

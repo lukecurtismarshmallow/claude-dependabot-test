@@ -8,7 +8,10 @@
       "Bash(git init:*)",
       "Bash(git branch:*)",
       "Bash(gh auth status:*)",
-      "Bash(git remote set-url:*)"
+      "Bash(git remote set-url:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)"
     ]
   }
 }
