@@ -1,14 +1,54 @@
 name: Claude Code Review
 
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
+  pull_request_target:
+    types: [opened, synchronize, reopened]
 
 jobs:
+  # First wait for CI to complete
+  wait-for-ci:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for CI to complete
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const sha = context.payload.pull_request.head.sha;
+            const startTime = Date.now();
+            const timeout = 10 * 60 * 1000; // 10 minutes
+
+            core.info(`Waiting for CI check on SHA: ${sha}`);
+
+            while (Date.now() - startTime < timeout) {
+              const { data: checkRuns } = await github.rest.checks.listForRef({
+                owner, repo, ref: sha,
+                filter: 'latest'
+              });
+
+              const ciCheck = checkRuns.check_runs.find(cr => cr.name === 'build-and-test');
+
+              if (ciCheck && ciCheck.status === 'completed') {
+                core.info(`CI completed with conclusion: ${ciCheck.conclusion}`);
+                core.setOutput('ci-conclusion', ciCheck.conclusion);
+                return;
+              }
+
+              core.info('CI still running, waiting 15s...');
+              await new Promise(r => setTimeout(r, 15000));
+            }
+
+            core.setFailed('Timed out waiting for CI');
+        id: wait-ci
+
+    outputs:
+      ci-conclusion: ${{ steps.wait-ci.outputs.ci-conclusion }}
+
+  # Then run Claude review with full PR context
   claude-review:
-    # Only run when CI was triggered by dependabot
-    if: github.event.workflow_run.actor.login == 'dependabot[bot]'
+    needs: wait-for-ci
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -17,55 +57,14 @@ jobs:
       actions: read
 
     steps:
-      - name: Find PR for this workflow run
-        id: find-pr
-        uses: actions/github-script@v7
-        with:
-          script: |
-            // Try the pull_requests array first
-            const prs = context.payload.workflow_run.pull_requests;
-            if (prs && prs.length > 0) {
-              core.setOutput('pr-number', prs[0].number);
-              const { data: prData } = await github.rest.pulls.get({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: prs[0].number
-              });
-              core.setOutput('pr-head-sha', prData.head.sha);
-              core.setOutput('pr-head-ref', prData.head.ref);
-              core.setOutput('found', 'true');
-              return;
-            }
-
-            // Fallback: search for PR by branch name
-            const branch = context.payload.workflow_run.head_branch;
-            const { data: pulls } = await github.rest.pulls.list({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              head: `${context.repo.owner}:${branch}`,
-              state: 'open'
-            });
-
-            if (pulls.length > 0) {
-              core.setOutput('pr-number', pulls[0].number);
-              core.setOutput('pr-head-sha', pulls[0].head.sha);
-              core.setOutput('pr-head-ref', pulls[0].head.ref);
-              core.setOutput('found', 'true');
-            } else {
-              core.setOutput('found', 'false');
-              core.warning(`No open PR found for branch: ${branch}`);
-            }
-
       - name: Checkout PR head
-        if: steps.find-pr.outputs.found == 'true'
         uses: actions/checkout@v4
         with:
-          ref: ${{ steps.find-pr.outputs.pr-head-sha }}
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up JDK 17
-        if: steps.find-pr.outputs.found == 'true'
         uses: actions/setup-java@v4
         with:
           java-version: '17'
@@ -73,7 +72,6 @@ jobs:
           cache: maven
 
       - name: Run Claude Code Review
-        if: steps.find-pr.outputs.found == 'true'
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -96,7 +94,7 @@ jobs:
           prompt: |
             You are an autonomous CI bot reviewing a Dependabot dependency update PR. You have FULL PERMISSION to make code changes, commit, and push to this PR branch. Do NOT ask for approval — act autonomously and fix any issues you find.
 
-            **CI Result: ${{ github.event.workflow_run.conclusion }}**
+            **CI Result: ${{ needs.wait-for-ci.outputs.ci-conclusion }}**
 
             **CRITICAL: Trust the PR data.** The dependency version in this PR definitely exists — Dependabot only creates PRs for published releases. Do NOT claim a version doesn't exist or hasn't been released. Your training data may be outdated. Always use WebSearch to look up current release information rather than relying on your built-in knowledge about version numbers.
 
