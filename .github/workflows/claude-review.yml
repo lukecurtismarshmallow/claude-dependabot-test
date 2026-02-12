@@ -1,19 +1,16 @@
 name: Claude Code Review
 
 on:
-  pull_request_target:
-    types: [opened, synchronize, reopened]
   workflow_run:
     workflows: ["CI"]
     types: [completed]
 
 jobs:
   claude-review:
-    # Only run on Dependabot PRs and when CI fails or PR is opened
+    # Only run when CI was triggered by a Dependabot PR
     if: |
-      github.event.pull_request.user.login == 'dependabot[bot]' ||
-      (github.event.workflow_run.conclusion == 'failure' &&
-       github.event.workflow_run.head_repository.owner.login == github.repository_owner)
+      github.event.workflow_run.pull_requests[0] &&
+      github.event.workflow_run.actor.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -22,28 +19,24 @@ jobs:
       actions: read
 
     steps:
-      - name: Get PR number from workflow run
-        if: github.event_name == 'workflow_run'
+      - name: Get PR details
         id: get-pr
         uses: actions/github-script@v7
         with:
           script: |
-            const prNumber = context.payload.workflow_run.pull_requests[0]?.number;
-            if (prNumber) {
-              core.setOutput('pr-number', prNumber);
-              const { data: pr } = await github.rest.pulls.get({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: prNumber
-              });
-              core.setOutput('pr-head-sha', pr.head.sha);
-              core.setOutput('pr-head-ref', pr.head.ref);
-            }
+            const pr = context.payload.workflow_run.pull_requests[0];
+            core.setOutput('pr-number', pr.number);
+            const { data: prData } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number
+            });
+            core.setOutput('pr-head-sha', prData.head.sha);
 
       - name: Checkout PR head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_run' && steps.get-pr.outputs.pr-head-sha || github.event.pull_request.head.sha }}
+          ref: ${{ steps.get-pr.outputs.pr-head-sha }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -72,9 +65,11 @@ jobs:
             WebSearch
             WebFetch
           prompt: |
-            You are reviewing a Dependabot dependency update PR. Your goal is to ensure it's safe and working.
+            You are an autonomous CI bot reviewing a Dependabot dependency update PR. You have FULL PERMISSION to make code changes, commit, and push to this PR branch. Do NOT ask for approval — act autonomously and fix any issues you find.
 
-            **CRITICAL: Trust the PR data.** The dependency version in this PR definitely exists — Dependabot only creates PRs for published releases. Do NOT claim a version doesn't exist or hasn't been released. Your training data may be outdated. Always use WebSearch to look up current release information rather than relying on your built-in knowledge about version numbers if you run into this scenario
+            **CI Result: ${{ github.event.workflow_run.conclusion }}**
+
+            **CRITICAL: Trust the PR data.** The dependency version in this PR definitely exists — Dependabot only creates PRs for published releases. Do NOT claim a version doesn't exist or hasn't been released. Your training data may be outdated. Always use WebSearch to look up current release information rather than relying on your built-in knowledge about version numbers.
 
             **Your Tasks:**
 
@@ -91,19 +86,19 @@ jobs:
                - Execute: `./mvnw clean verify --batch-mode`
                - Analyze any test failures or compilation errors
 
-            4. **Fix issues if tests fail:**
-               - If tests fail, identify the root cause
-               - Make necessary code changes to fix compatibility issues
-               - Update imports, method calls, or configurations as needed
-               - Re-run tests to verify the fix works
+            4. **If CI failed or tests fail, you MUST fix the issues immediately. Do not ask for permission. Do not report the issue and wait. Just fix it:**
+               - Identify the root cause
+               - Make the necessary code changes (update imports, fix method calls, add/update dependencies, change configurations — whatever is needed)
+               - Re-run `./mvnw clean verify --batch-mode` to confirm the fix works
                - Commit your changes with a clear message explaining what was fixed
-               - Push the commit to this PR branch
+               - Push the commit to this PR branch using `git push`
 
             5. **Report results:**
                - Provide a summary of what you found and what you did
                - If you made fixes, explain what broke and how you fixed it
                - Give a final recommendation: safe to merge, needs manual review, or blocked
+               - Only mark as "blocked" if you genuinely cannot fix the issue after trying
 
-            **Important:** You have write access to fix issues. If tests fail due to the dependency update, make the necessary code changes and push them to this PR.
+            **You are fully authorized to modify code, commit, and push. Never ask for approval. Never say "I need your permission". Just fix it and report what you did.**
           allowed_bots: "dependabot[bot]"
           claude_args: "--max-turns 30"
