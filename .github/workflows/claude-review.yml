@@ -54,7 +54,7 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
-      actions: read
+      actions: write
 
     steps:
       - name: Checkout PR head
@@ -104,13 +104,14 @@ jobs:
             4. **If CI failed or tests fail, you MUST fix the issues immediately. Do not ask for permission. Do not report the issue and wait. Just fix it:**
                - Identify the root cause
                - Make the necessary code changes (update imports, fix method calls, add/update dependencies, change configurations — whatever is needed)
-               - Re-run `./mvnw clean verify --batch-mode` to confirm the fix works
-               - Commit your changes with a clear message explaining what was fixed
+               - **MANDATORY: After making fixes, you MUST run `./mvnw clean verify --batch-mode` again and confirm BUILD SUCCESS before committing. Do NOT commit untested code. Do NOT skip this step. If the build still fails, keep fixing until it passes.**
+               - Only after seeing BUILD SUCCESS: commit your changes with a clear message explaining what was fixed
                - Push the commit to this PR branch using `git push`
 
             5. **Report results:**
                - Provide a summary of what you found and what you did
                - If you made fixes, explain what broke and how you fixed it
+               - **Include the final `./mvnw clean verify` output showing BUILD SUCCESS or BUILD FAILURE**
                - Give a final recommendation: safe to merge, needs manual review, or blocked
                - Only mark as "blocked" if you genuinely cannot fix the issue after trying
 
@@ -169,31 +170,18 @@ jobs:
 
       - name: Re-trigger CI if Claude pushed fixes
         if: always()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const prNumber = context.payload.pull_request.number;
-            const { data: pr } = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-            });
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          ORIGINAL_SHA=${{ github.event.pull_request.head.sha }}
+          CURRENT_SHA=$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json headRefOid --jq '.headRefOid')
 
-            const originalSha = context.payload.pull_request.head.sha;
-            const currentSha = pr.head.sha;
-
-            if (currentSha !== originalSha) {
-              core.info(`Claude pushed new commit (${originalSha.slice(0,7)} -> ${currentSha.slice(0,7)}). Re-triggering CI...`);
-
-              // Trigger CI by dispatching a workflow run
-              await github.rest.actions.createWorkflowDispatch({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                workflow_id: 'ci.yml',
-                ref: pr.head.ref,
-              });
-
-              core.info('CI re-triggered successfully');
-            } else {
-              core.info('No new commits from Claude, skipping CI re-trigger');
-            }
+          if [ "$CURRENT_SHA" != "$ORIGINAL_SHA" ]; then
+            BRANCH=$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json headRefName --jq '.headRefName')
+            echo "Claude pushed new commit ($ORIGINAL_SHA -> $CURRENT_SHA). Re-triggering CI on branch $BRANCH..."
+            gh workflow run ci.yml --repo "${{ github.repository }}" --ref "$BRANCH"
+            echo "CI re-triggered successfully"
+          else
+            echo "No new commits from Claude, skipping CI re-trigger"
+          fi
