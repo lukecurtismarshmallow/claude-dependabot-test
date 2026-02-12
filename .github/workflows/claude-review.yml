@@ -46,9 +46,10 @@ jobs:
     outputs:
       ci-conclusion: ${{ steps.wait-ci.outputs.ci-conclusion }}
 
-  # Then run Claude review with full PR context
+  # Then run Claude review with full PR context (only if CI failed)
   claude-review:
     needs: wait-for-ci
+    if: needs.wait-for-ci.outputs.ci-conclusion == 'failure'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -79,40 +80,30 @@ jobs:
           github_token: ${{ github.token }}
           use_sticky_comment: true
           show_full_output: true
+          additional_permissions: |
+            Bash(./mvnw*)
+            Bash(mvn*)
+            Bash(git*)
           prompt: |
-            You are an autonomous CI bot reviewing a Dependabot dependency update PR. You have FULL PERMISSION to make code changes, commit, and push to this PR branch. Do NOT ask for approval — act autonomously and fix any issues you find.
+            The CI build FAILED for this Dependabot dependency update PR. Your job is to fix it autonomously.
 
-            **CI Result: ${{ needs.wait-for-ci.outputs.ci-conclusion }}**
+            **CRITICAL: Trust the PR data.** The dependency version in this PR definitely exists — Dependabot only creates PRs for published releases. Do NOT claim a version doesn't exist. If you need release info, use WebSearch.
 
-            **CRITICAL: Trust the PR data.** The dependency version in this PR definitely exists — Dependabot only creates PRs for published releases. Do NOT claim a version doesn't exist or hasn't been released. Your training data may be outdated. Always use WebSearch to look up current release information rather than relying on your built-in knowledge about version numbers.
+            **Your Task:**
+            1. Check recent workflow runs to view CI failure logs: `gh run list --limit 3` then `gh run view <run-id> --log`
+            2. Identify the root cause from the error output
+            3. Fix the code (you have WRITE permission - no approval needed)
+            4. Commit: "Fix: [brief description]"
+            5. Push: `git push`
 
-            **Your Tasks:**
+            The push will automatically trigger CI to re-run. Do NOT manually re-run tests - just push and let CI handle it.
 
-            1. **Analyze the update:**
-               - Check if this is a major, minor, or patch version bump
-               - Use WebSearch to look up the changelog/release notes for the NEW version (do not guess from memory)
-               - Verify compatibility with Java 17 and Spring Boot 3.1.0
-
-            2. **Check code compatibility:**
-               - Review code that uses the updated dependency
-               - Look for deprecated APIs or breaking changes that affect our code
-
-            3. **If CI failed or tests fail, you MUST fix the issues immediately. Do not ask for permission. Do not report the issue and wait. Just fix it:**
-               - Identify the root cause
-               - Make the necessary code changes (update imports, fix method calls, add/update dependencies, change configurations — whatever is needed)
-               - Push the commit to this PR branch using `git push`
-
-            4. **Report results:**
-               - Provide a summary of what you found and what you did
-               - If you made fixes, explain what broke and how you fixed it
-               - **Include the final `./mvnw clean verify` output showing BUILD SUCCESS or BUILD FAILURE**
-               - Give a final recommendation: safe to merge, needs manual review, or blocked
-               - Only mark as "blocked" if you genuinely cannot fix the issue after trying
-
-            **You are fully authorized to modify code, commit, and push. Never ask for approval. Never say "I need your permission". Just fix it and report what you did.**
+            **Be efficient:**
+            - Only read files that need fixing
+            - Only search docs if you need to understand a specific breaking change
+            - Make surgical fixes, don't refactor unnecessarily
           allowed_bots: "dependabot[bot]"
-          claude_args: '--max-turns 30 --allowedTools "Edit,Write,MultiEdit,Read,Glob,Grep,LS,Bash(./mvnw:*),Bash(mvn:*),Bash(git:*),Bash(chmod:*),WebSearch,WebFetch"'
-
+          claude_args: '--max-turns 20 --allowedTools "Edit,Write,MultiEdit,Read,Glob,Grep,LS,Bash(./mvnw:*),Bash(mvn:*),Bash(git:*),Bash(chmod:*),WebSearch,WebFetch"'
       - name: Post review comment on PR
         if: always()
         uses: actions/github-script@v7
