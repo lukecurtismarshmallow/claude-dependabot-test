@@ -67,10 +67,10 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- Explicitly add Jackson for test object mapping -->
+        <!-- Explicitly add Spring Boot test autoconfigure for @AutoConfigureMockMvc -->
         <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-test-autoconfigure</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
