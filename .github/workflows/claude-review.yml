@@ -3,24 +3,49 @@ name: Claude Code Review
 on:
   pull_request_target:
     types: [opened, synchronize, reopened]
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
 
 jobs:
   claude-review:
-    # Only run on Dependabot PRs
-    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    # Only run on Dependabot PRs and when CI fails or PR is opened
+    if: |
+      github.event.pull_request.user.login == 'dependabot[bot]' ||
+      (github.event.workflow_run.conclusion == 'failure' &&
+       github.event.workflow_run.head_repository.owner.login == github.repository_owner)
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
       issues: write
       actions: read
 
     steps:
+      - name: Get PR number from workflow run
+        if: github.event_name == 'workflow_run'
+        id: get-pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.workflow_run.pull_requests[0]?.number;
+            if (prNumber) {
+              core.setOutput('pr-number', prNumber);
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber
+              });
+              core.setOutput('pr-head-sha', pr.head.sha);
+              core.setOutput('pr-head-ref', pr.head.ref);
+            }
+
       - name: Checkout PR head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 1
+          ref: ${{ github.event_name == 'workflow_run' && steps.get-pr.outputs.pr-head-sha || github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -34,15 +59,47 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ github.token }}
-          allowed_tools: "Bash(./mvnw*),Bash(git diff*),Bash(git log*),WebSearch,WebFetch"
+          use_sticky_comment: true
+          show_full_output: true
+          additional_permissions: |
+            Bash(./mvnw*)
+            Bash(mvn*)
+            Bash(git diff*)
+            Bash(git log*)
+            Bash(git add*)
+            Bash(git commit*)
+            Bash(git push*)
           prompt: |
-            Review this Dependabot dependency update PR. Specifically:
+            You are reviewing a Dependabot dependency update PR. Your goal is to ensure it's safe and working.
 
-            1. Check if the dependency version bump is a major, minor, or patch update
-            2. Look at the changelog/release notes for breaking changes
-            3. Verify the updated dependency is still compatible with our Java 17 / Spring Boot 3.1 setup
-            4. Check if our code that uses the updated dependency (see ItemService.java) needs any changes
-            5. Run the tests with `./mvnw test --batch-mode` and report results
-            6. Provide a clear recommendation: safe to merge, needs changes, or needs manual review
+            **Your Tasks:**
+
+            1. **Analyze the update:**
+               - Check if this is a major, minor, or patch version bump
+               - Look at changelogs/release notes for breaking changes (use WebSearch if needed)
+               - Verify compatibility with Java 17 and Spring Boot 3.1.0
+
+            2. **Check code compatibility:**
+               - Review ItemService.java and other code that uses the updated dependency
+               - Look for deprecated APIs or breaking changes that affect our code
+
+            3. **Run tests:**
+               - Execute: `./mvnw clean verify --batch-mode`
+               - Analyze any test failures or compilation errors
+
+            4. **Fix issues if tests fail:**
+               - If tests fail, identify the root cause
+               - Make necessary code changes to fix compatibility issues
+               - Update imports, method calls, or configurations as needed
+               - Re-run tests to verify the fix works
+               - Commit your changes with a clear message explaining what was fixed
+               - Push the commit to this PR branch
+
+            5. **Report results:**
+               - Provide a summary of what you found and what you did
+               - If you made fixes, explain what broke and how you fixed it
+               - Give a final recommendation: safe to merge, needs manual review, or blocked
+
+            **Important:** You have write access to fix issues. If tests fail due to the dependency update, make the necessary code changes and push them to this PR.
           allowed_bots: "dependabot[bot]"
-          claude_args: "--max-turns 20"
+          claude_args: "--max-turns 30"
