@@ -67,10 +67,10 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- Explicitly add Spring Boot test autoconfigure for @AutoConfigureMockMvc -->
+        <!-- Spring Boot 4.0 modularized test infrastructure: required for @AutoConfigureMockMvc -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-test-autoconfigure</artifactId>
+            <artifactId>spring-boot-starter-webmvc-test</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
