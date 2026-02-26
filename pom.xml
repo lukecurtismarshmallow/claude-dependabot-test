@@ -22,7 +22,7 @@
         <!-- Intentionally outdated: current is 33.x -->
         <guava.version>31.0.1-jre</guava.version>
         <!-- Intentionally outdated: current is 1.5.x -->
-        <commons-text.version>1.9</commons-text.version>
+        <commons-text.version>1.15.0</commons-text.version>
     </properties>
 
     <dependencies>
