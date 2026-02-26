@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.1.0</version>
+        <version>4.0.3</version>
         <relativePath/>
     </parent>
 
@@ -67,10 +67,10 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- Explicitly add Spring Boot test autoconfigure for @AutoConfigureMockMvc -->
+        <!-- Spring Boot 4.0 modularized test infrastructure: required for @AutoConfigureMockMvc -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-test-autoconfigure</artifactId>
+            <artifactId>spring-boot-starter-webmvc-test</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
